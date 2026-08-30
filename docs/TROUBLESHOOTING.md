@@ -31,7 +31,7 @@ query` and inspect the data yourself.
 | `ModuleNotFoundError: No module named 'dbt'` | venv not activated. | `uv run ct setup` re-creates it. Or `source .venv/bin/activate` manually. |
 | `(psycopg2.OperationalError) could not translate host name "localhost" to address` | dbt profile is pointing at Postgres, but Postgres isn't running. | Confirm `transform/profiles.yml` has `type: duckdb`. The default is correct. |
 | `Error: CRYPTO_TRACKED_COINS not set in environment` | `.env` not copied, or the key in `.env` has a typo. | `cp .env.example .env`. `uv run ct` loads only the user-tunable knobs (`CRYPTO_TRACKED_COINS`, `CRYPTO_FIAT_CURRENCIES`, `CRYPTO_LOG_LEVEL`, `INTER_COIN_SLEEP_SECONDS`); paths are managed by `ct` and must NOT appear in `.env`. |
-| `ValueError: 'coins_markets_raw' does not exist` (during dbt) | No raw data (ingest hasn't run). | `uv run ct ingest` first, or `uv run ct run` for the full pipeline. |
+| `ValueError: 'coins_markets_raw' does not exist` (during dbt) | No data yet (ingest hasn't run). | `uv run ct ingest` first, or `uv run ct run` for the full pipeline. |
 | `[dlt.load.utils_load_data.SchemaNotImplementedError]: Table 'fct_coin_price_daily' was truncated … incremental load requires an existing table` | Incremental model first run (table doesn't exist yet). | Run `uv run ct dbt-refresh` to do a full refresh, then subsequent runs are incremental. Or uv run ct clean-db && `uv run ct run`. |
 | `(pydantic_core._pydantic_core.ValidationError) 1 validation error for EventLogConfig` | Airflow metadata DB is corrupted or schema mismatch. | `uv run ct clean` (drops Airflow metadata) then `uv run ct airflow-init` (recreates it). |
 | `Unauthorized. You must provide a valid access token` | CoinGecko returned 401 (hit the history-request ceiling). | Wait a few hours. CoinGecko free tier caps at 4 history requests per minute. `ingest/coingecko.py` has exponential backoff; 401 is never retried because retrying cannot help. |
@@ -127,7 +127,7 @@ If `max(price_date) < current_date`, re-run `uv run ct ingest`.
 **Cause 1:** `dbt source freshness` threshold exceeded.
 
 ```
-[ERROR]: Source "raw.coins_markets_raw" has not been updated since 26 hours ago.
+[ERROR]: Source "bronze.coins_markets_raw" has not been updated since 26 hours ago.
 ```
 
 This is a warning by design. Ignore it if you intentionally paused the DAG.

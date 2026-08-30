@@ -10,7 +10,7 @@ models:
         data_tests: [not_null, unique]
 
   - name: br_coins_markets
-    description: "Market snapshots from completed loads only. Grain unchanged from raw."
+    description: "Market snapshots from completed loads only. Grain unchanged from the dlt table."
     columns:
       - name: id
         data_tests: [not_null]
@@ -22,7 +22,7 @@ models:
               field: load_id
 
   - name: br_coin_market_chart
-    description: "Daily history from completed loads only. Grain unchanged from raw."
+    description: "Daily history from completed loads only. Grain unchanged from the dlt table."
     columns:
       - name: coin_id
         data_tests: [not_null]
@@ -34,7 +34,7 @@ models:
               field: load_id
 
   - name: br_fx_rates
-    description: "FX rates from completed loads only. Grain unchanged from raw."
+    description: "FX rates from completed loads only. Grain unchanged from the dlt table."
     columns:
       - name: quote
         data_tests: [not_null]

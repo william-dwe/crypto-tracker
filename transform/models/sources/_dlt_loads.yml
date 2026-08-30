@@ -1,8 +1,8 @@
 version: 2
 
 sources:
-  - name: raw
-    schema: raw
+  - name: bronze
+    schema: bronze
     tables:
       - name: _dlt_loads
         description: >

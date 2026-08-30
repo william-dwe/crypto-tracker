@@ -10,6 +10,7 @@ __pycache__/
 *.duckdb
 *.duckdb.wal
 .env
+*.egg-info/
 
 # dbt's local anonymous usage id
 transform/.user.yml

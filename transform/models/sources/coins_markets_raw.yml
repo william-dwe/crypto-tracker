@@ -1,12 +1,13 @@
 version: 2
 
 sources:
-  - name: raw
+  - name: bronze
     description: >
-      dlt's landing zone. dlt owns this schema entirely — alongside the source
-      tables it maintains `_dlt_loads`, `_dlt_version`, `_dlt_pipeline_state`
-      and a `raw_staging` schema for merge loads. Nothing here is dbt-managed.
-    schema: raw
+      dlt's landing zone, shared with dbt's trust-filter views. dlt owns the
+      `*_raw` source tables plus its bookkeeping (`_dlt_loads`, `_dlt_version`,
+      `_dlt_pipeline_state`) and the `bronze_staging` schema for merge loads.
+      dbt adds the `br_*` views over the source tables in the same schema.
+    schema: bronze
     tables:
       - name: coins_markets_raw
         description: >

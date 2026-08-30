@@ -11,39 +11,55 @@
   slot, why dlt splits price columns without a `Decimal` cast, why the FX
   spine is forward-filled — each is a comment in the file it shapes.
 - **Built to be taught from.** The repository doubles as a workshop for people
-  new to data engineering; see [docs/WORKSHOP.md](docs/WORKSHOP.md).
+  new to data engineering; see [docs/workshop.md](docs/workshop.md).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](.python-version)
-[![dbt 1.12](https://img.shields.io/badge/dbt-1.12-orange.svg)](transform/pyproject.toml)
+[![dbt 1.12](https://img.shields.io/badge/dbt-1.12-orange.svg)](pyproject.toml)
 [![Airflow 3.3](https://img.shields.io/badge/Airflow-3.3-017CEE.svg)](pyproject.toml)
 [![DuckDB 1.5](https://img.shields.io/badge/DuckDB-1.5-FFF000.svg)](pyproject.toml)
 
 ## Architecture at a glance
 
 ```mermaid
-flowchart LR
-    CG[CoinGecko API] --> DL[(dlt<br/>ingest/)]
-    FX[Frankfurter API] --> DL
-    DL --> R[raw]
-    R --> B[bronze]
-    B --> S[silver]
-    S --> G[gold]
-    G --> M[analysis_gold.sql<br/>DuckDB UI]
-    AF[Airflow 3<br/>dags/] -. orchestrates .-> DL
-    AF -. builds .-> S
-    D[(DuckDB<br/>data/crypto.duckdb)] -.contains.-> R
-    D -.contains.-> B
-    D -.contains.-> S
-    D -.contains.-> G
+graph LR
+
+    %% Source Layer
+    subgraph Source ["1. Source Systems (API)"]
+        CoinGeckoAPI["CoinGecko API"]
+        FrankfurterAPI["Frankfurter API"]
+    end
+
+    subgraph Schedule ["Pipeline Orchestration (Airflow)"]
+
+        %% Ingestion Layer
+        subgraph Ingest ["2. Ingestion (DLT)"]
+            Ingestion["Extract Data"]
+
+            CoinGeckoAPI -- Batch Data Extraction --> Ingestion
+            FrankfurterAPI -- Batch Data Extraction --> Ingestion
+        end
+
+        %% Storage/Warehouse Layer
+        subgraph Warehouse ["3. Data Warehouse (DuckDB + DBT)"]
+            Bronze[Bronze Layer]:::storage
+            Silver[Silver Layer]:::storage
+            Gold[Gold Layer]:::storage
+            Ingestion --> Bronze -- data cleansing --> Silver -- data modeling --> Gold
+        end
+
+    end
+
+    %% Serving/Data Mart Layer
+    subgraph Mart ["4. Serving Layer (DuckDB UI)"]
+        DuckDBUI[Data Serving]:::storage
+        Gold --> DuckDBUI
+    end
 ```
 
 | Layer | Materialization | Contents |
 |---|---|---|
-| **raw** | dlt-owned tables | dlt's landing zone, including its own `_dlt_*` bookkeeping tables. Never modelled by hand. |
-| **bronze** | dbt views | Trusted subset of `raw` — only rows whose dlt load reached `status = 0`. |
-| **silver** | dbt views (one table) | Typed, deduped, gapless. `stg_fx_rates_filled` overrides to a table because the calendar spine is queried by every downstream mart. |
-| **gold** | dbt tables | Star schema (`dim_*` / `fct_*`) and datamarts (`mart_*`). |
+| **bronze** | dlt tables + dbt views | dlt's landing zone (source tables, `_dlt_*` bookkeeping, `bronze_staging`) plus dbt's `br_*` trust-filter views over it. |
 
 ## What you get
 
@@ -51,21 +67,23 @@ After a successful first run:
 
 - **10 cryptocurrencies** × **365 days** of daily history (CoinGecko free tier)
 - **9 reporting currencies** — USD base plus 8 ECB quotes
-- **18 dbt models** across 4 layers (4 bronze / 4 silver / 10 gold)
+- **18 dbt models** across 3 layers (4 bronze / 4 silver / 10 gold)
 - **75 declared data tests** (51 `not_null`, 16 `relationships`, 7 `unique`, 1
   `accepted_values`)
 - **One DuckDB file** (~12 MB) at `data/crypto.duckdb`
 
 ## Prerequisites
 
-| Tool | Why | Install |
-|---|---|---|
-| `uv` | Creates the venv, installs the pinned stack, and runs every command below | `brew install uv` (macOS) or `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| `git` | Cloning the repo | `xcode-select --install` (macOS) — comes bundled with the Xcode Command Line Tools |
+| Tool | Why | Install (macOS) | Install (Windows) | Install (Ubuntu/Debian) |
+|---|---|---|---|---|
+| `uv` | Creates the venv, installs the pinned stack, and runs every command below | `brew install uv` | `winget install astral-sh.uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` (or `sudo apt install uv` after [adding the uv apt repo](https://docs.astral.sh/uv/getting-started/installation/)) |
+| `git` | Cloning the repo | `xcode-select --install` (bundled with the Xcode Command Line Tools) | `winget install Git.Git` (or install [Git for Windows](https://git-scm.com/download/win)) | `sudo apt install git` |
 
-The two rows above cost **one** install on macOS: `xcode-select --install`
-provides `git`, leaving `uv` as the only separate tool. Every command below is
-`uv run ct <command>`. The DuckDB engine arrives as the pinned `duckdb==1.5.5`
+On macOS, the two rows above cost **one** install: `xcode-select --install`
+provides `git`, leaving `uv` as the only separate tool. The recommended form
+for every command below is `uv run ct <command>`; the raw `dlt`/`dbt`/`airflow`
+forms that the workshop teaches live in [Commands — classic](#classic-commands).
+The DuckDB engine arrives as the pinned `duckdb==1.5.5`
 Python package inside the venv, so no separate database install is needed.
 
 No API keys. The pipeline uses CoinGecko's keyless free tier and Frankfurter's
@@ -80,7 +98,7 @@ git clone <repo-url> && cd crypto-tracker
 uv run ct setup          # creates .venv (Python 3.11) and installs the pinned stack — ~1-2 min
 uv run ct airflow-init   # creates the Airflow metadata DB and the 1-slot duckdb_writer pool
 uv run ct run            # ingest + build; ~4 min on the first run (365 days, rate-limit paced)
-uv run ct tables         # confirm: rows across raw / bronze / silver / gold
+uv run ct tables         # confirm: rows across bronze / silver / gold
 uv run ct portfolio      # confirm: portfolio value and P&L in all 9 currencies
 ```
 
@@ -94,6 +112,10 @@ uv run ct portfolio      # confirm: portfolio value and P&L in all 9 currencies
 
 A full database rebuild (4 minutes + a clean slate) is `uv run ct clean-db`. To
 also drop dbt artifacts and the Airflow metadata DB, use `uv run ct clean`.
+
+The classic-form equivalents of every `uv run ct` command (the raw `dlt`,
+`dbt`, `airflow`, and DuckDB invocations that the workshop teaches) live in
+[Commands — classic](#classic-commands).
 
 ## Configuration
 
@@ -112,12 +134,66 @@ cp .env.example .env
 | `BASE_CURRENCY` | `USD` | Reporting base. Add it to `CRYPTO_FIAT_CURRENCIES` if you want to value the portfolio in USD. |
 | `CRYPTO_LOG_LEVEL` | `INFO` | `DEBUG` shows every dlt request and retry. |
 
-## Daily commands
+## Commands
+
+Every command in this repo exists in two forms that run exactly the same
+subprocesses:
+
+- **Classic form** — the raw `python -m` (dlt), `dbt`, `airflow`, and DuckDB
+  invocations. The workshop ([docs/workshop.md](docs/workshop.md)) teaches
+  this form so every seam of the pipeline is visible.
+- **Shortcut form** — `uv run ct <subcommand>`: the repo's thin wrapper
+  ([scripts/cli.py](scripts/cli.py)) that runs the same commands with the
+  environment (venv, `AIRFLOW_HOME`, `CRYPTO_DB_PATH`, `PYTHONPATH`, `.env`)
+  already set.
+
+### Classic commands
+
+Set these once per shell, then run any row from the table below:
+
+```bash
+source .venv/bin/activate        # dbt + airflow + python on PATH
+export AIRFLOW_HOME="$PWD/.airflow" AIRFLOW__CORE__LOAD_EXAMPLES=False PYTHONPATH="$PWD"
+# for the dbt rows only, from transform/:
+export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb"
+```
+
+| Task | Classic command (from `docs/workshop.md`) |
+|---|---|
+| first-time setup | `uv sync` |
+| init Airflow metadata + pool | `airflow db migrate && airflow pools set duckdb_writer 1 "Serializes DuckDB write access"` |
+| ingest (dlt) | `python -m ingest.run_ingest` |
+| dbt build | `cd transform && export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb" && dbt build --profiles-dir . && cd ..` |
+| dbt tests only | `dbt test --profiles-dir .` (from `transform/`) |
+| dbt full refresh | `dbt build --full-refresh --profiles-dir .` (from `transform/`) |
+| dbt lineage docs | `dbt docs generate --profiles-dir . && dbt docs serve --port 8081 --profiles-dir .` (from `transform/`) |
+| list tables | `python -m scripts.duckdb_cli tables` |
+| portfolio | `python -m scripts.duckdb_cli portfolio` |
+| performance | `python -m scripts.duckdb_cli performance` |
+| SQL shell (RO) | `python -m scripts.duckdb_cli shell --readonly` |
+| SQL shell (RW) | `python -m scripts.duckdb_cli shell` |
+| one-shot SQL | `python -m scripts.duckdb_cli sql "<query>"` |
+| lock probe | `python -m scripts.duckdb_cli check-lock` |
+| Airflow UI | `airflow standalone` |
+| admin creds | `cat "$AIRFLOW_HOME/simple_auth_manager_passwords.json.generated"` |
+| DAG test (no scheduler) | `airflow dags reserialize && airflow dags test crypto_tracker_daily` |
+| DAG trigger | `airflow dags trigger crypto_tracker_daily` |
+| DAG run history | `airflow dags list-runs crypto_tracker_daily` |
+| unpause / pause | `airflow dags unpause crypto_tracker_daily` / `airflow dags pause crypto_tracker_daily` |
+| clean warehouse + dlt state | `rm -f data/crypto.duckdb data/crypto.duckdb.wal && rm -rf ~/.dlt/pipelines/crypto_tracker` |
+| drop dbt artifacts + Airflow metadata | `rm -rf transform/target transform/logs .airflow` |
+
+### Shortcut commands
+
+Same commands, one prefix. `ct` activates nothing — it invokes the venv
+binaries directly and sets `AIRFLOW_HOME`, `CRYPTO_DB_PATH`, `PYTHONPATH`, and
+loads `.env` automatically (see [scripts/cli.py](scripts/cli.py)). `uv run ct`
+with no subcommand prints the grouped list.
 
 | Command | Does |
 |---|---|
 | `uv run ct run` | ingest + rebuild everything |
-| `uv run ct ingest` | load CoinGecko + FX into `raw` only |
+| `uv run ct ingest` | load CoinGecko + FX into `bronze` only |
 | `uv run ct dbt` | build + test silver and gold (no re-ingest) |
 | `uv run ct dbt-refresh` | full-refresh rebuild of the incremental facts |
 | `uv run ct test` | run dbt tests only, without rebuilding |
@@ -232,7 +308,7 @@ intraday spread) see `analysis_gold.sql`.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the reference document for
   *why the code looks like this*: layers, trust boundary, star schema, join
   discipline, hard-won constraints.
-- [docs/WORKSHOP.md](docs/WORKSHOP.md) — a guided walkthrough for new data
+- [docs/workshop.md](docs/workshop.md) — a guided walkthrough for new data
   engineers: nine modules, nine exercises, solutions included.
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — symptom → cause → fix
   for every failure mode observed against the live APIs and DuckDB.
@@ -242,7 +318,14 @@ intraday spread) see `analysis_gold.sql`.
 This repository doubles as a workshop for people new to data engineering.
 Prerequisites: comfortable with SQL basics (`select`, `join`, `group by`) and a
 terminal. No prior dbt, dlt, Airflow, dimensional-modelling, or cloud
-experience is assumed. See [docs/WORKSHOP.md](docs/WORKSHOP.md).
+experience is assumed. See [docs/workshop.md](docs/workshop.md).
+
+The default walkthrough ([docs/workshop.md](docs/workshop.md)) uses the
+underlying tools directly — `dlt`, `dbt`, `airflow`, `duckdb` — so you can see
+every command the pipeline runs. A ct-based twin that wraps the same flow in a
+`uv run ct <subcommand>` helper is available at
+[docs/WORKSHOP_WITH_CT.md](docs/WORKSHOP_WITH_CT.md) for participants who
+prefer one-command ergonomics.
 
 ## Contributing
 

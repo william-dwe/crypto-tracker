@@ -40,10 +40,10 @@ def resolve_db(path: str | None) -> str:
 # ordinary newlines inside a triple-quoted string.
 TABLES_SQL = """
     select schema_name as layer, table_name as object, 'TABLE' as kind, estimated_size as approx_rows
-    from duckdb_tables() where schema_name in ('raw','bronze','silver','gold')
+    from duckdb_tables() where schema_name in ('bronze','silver','gold')
     union all
     select schema_name, view_name, 'VIEW', null from duckdb_views()
-    where schema_name in ('raw','bronze','silver','gold') and not internal
+    where schema_name in ('bronze','silver','gold') and not internal
     order by 1, 2
 """
 

@@ -1,4 +1,4 @@
-"""Entry point that loads both sources into the raw layer of the DuckDB file.
+"""Entry point that loads both sources directly into the `bronze` layer of the DuckDB file.
 
 Run directly (``python -m ingest.run_ingest``) or via the Airflow
 ``ingest_raw`` task, which calls :func:`run_ingest`.
@@ -32,17 +32,18 @@ logger = logging.getLogger(__name__)
 # schema names ambiguous and produce a binder error.
 PIPELINE_NAME = "crypto_tracker"
 
-# dlt lands here, and it owns this schema completely: alongside the source
-# tables it writes its own bookkeeping (`_dlt_loads`, `_dlt_version`,
-# `_dlt_pipeline_state`) plus a `<dataset>_staging` schema for merge loads.
-# Those cannot be relocated independently, so the landing zone is kept as its
-# own `raw` layer and `bronze` is left to dbt. That keeps every medallion layer
-# dbt-owned and free of pipeline-internal tables.
-DATASET_NAME = "raw"
+# dlt binds ONE dataset per pipeline, so the source tables (`coins_markets_raw`,
+# `coin_market_chart_raw`, `fx_rates_raw`) land together with dlt's bookkeeping
+# (`_dlt_loads`, `_dlt_version`, `_dlt_pipeline_state`) and the
+# `<dataset>_staging` merge schema — none of which can be split across schemas.
+# So dlt lands directly in `bronze`, the dbt `br_*` views live in the same schema
+# alongside the dlt tables, and the trust boundary is `br_completed_loads`
+# filtering `_dlt_loads.status = 0`.
+DATASET_NAME = "bronze"
 
 
 def _table_has_rows(table: str) -> bool:
-    """Check for existing raw data using a short-lived read-only connection.
+    """Check for existing bronze data using a short-lived read-only connection.
 
     Opened and closed *before* dlt takes its write lock. DuckDB refuses a
     read-only connection while another process holds a write lock, so these two

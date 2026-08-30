@@ -1,4 +1,4 @@
-"""Frankfurter FX raw-layer resource.
+"""Frankfurter FX resource.
 
 The entire 365-day backfill for all tracked currencies is a *single* request:
 8 quotes x 255 ECB business days = 2040 rows in one response.
@@ -13,7 +13,7 @@ Two non-obvious requirements:
 
 ECB publishes only on TARGET business days, so roughly 110 of every 365 calendar
 days are absent. That gap is closed downstream in ``stg_fx_rates_filled``, not
-here — the raw layer stays faithful to the source.
+here — the bronze layer stays faithful to the source.
 """
 
 from __future__ import annotations

@@ -5,35 +5,54 @@ This document explains *why the code looks like this* — the constraints, decis
 ## Pipeline overview
 
 ```mermaid
-flowchart LR
-    CG[CoinGecko API] --> DL[(dlt)]
-    FX[Frankfurter API] --> DL
-    DL --> R["raw<br/>(dlt-owned)"]
-    AF[Airflow 3] --> I["ingest_raw<br/>pool=duckdb_writer"]
-    I --> R
-    R --> B["bronze<br/>(dbt views)"]
-    B --> DBT["dbt_build<br/>pool=duckdb_writer"]
-    DBT --> S["silver<br/>(dbt views)"]
-    DBT --> G["gold<br/>(dbt tables)"]
-    RA["crypto_raw<br/>(Asset)"]
-    GA["crypto_gold<br/>(Asset)"]
-    I -.outlet.-> RA
-    DBT -.outlet.-> GA
+graph LR
+
+    %% Source Layer
+    subgraph Source ["1. Source Systems (API)"]
+        CoinGeckoAPI["CoinGecko API"]
+        FrankfurterAPI["Frankfurter API"]
+    end
+
+    subgraph Schedule ["Pipeline Orchestration (Airflow)"]
+
+        %% Ingestion Layer
+        subgraph Ingest ["2. Ingestion (DLT)"]
+            Ingestion["Extract Data"]
+
+            CoinGeckoAPI -- Batch Data Extraction --> Ingestion
+            FrankfurterAPI -- Batch Data Extraction --> Ingestion
+        end
+
+        %% Storage/Warehouse Layer
+        subgraph Warehouse ["3. Data Warehouse (DuckDB + DBT)"]
+            Bronze[Bronze Layer]:::storage
+            Silver[Silver Layer]:::storage
+            Gold[Gold Layer]:::storage
+            Ingestion --> Bronze -- data cleansing --> Silver -- data modeling --> Gold
+        end
+
+    end
+
+    %% Serving/Data Mart Layer
+    subgraph Mart ["4. Serving Layer (DuckDB UI)"]
+        DuckDBUI[Data Serving]:::storage
+        Gold --> DuckDBUI
+    end
 ```
 
 The `ingest_raw` task (retries 3, delay 5 min) extracts from CoinGecko and
-Frankfurter into `raw`, then the `dbt_build` task (retries 1, delay 2 min)
-transforms through bronze and silver into gold. Both tasks hold the
+Frankfurter into `bronze`, then the `dbt_build` task (retries 1, delay 2 min)
 `duckdb_writer` pool — a 1-slot gate that serialises all writes to the DuckDB
 file. This is a correctness mechanism, not a performance tweak.
 
 ## Why ELT, not ETL
 
-**Land first, transform second.** The raw layer is byte-faithful to the APIs:
-one table per endpoint (`coins_markets_raw`, `coin_market_chart_raw`,
-`fx_rates_raw`), with every field the API returned. If a transformation breaks,
-or an algorithm changes, or a downstream test fails, you can re-run the
-transformation without re-hitting the rate-limited APIs.
+**Land first, transform second.** The dlt tables in `bronze` are byte-faithful
+to the APIs: one table per endpoint (`coins_markets_raw`,
+`coin_market_chart_raw`, `fx_rates_raw`), with every field the API returned.
+If a transformation breaks, or an algorithm changes, or a downstream test
+fails, you can re-run the transformation without re-hitting the rate-limited
+APIs.
 
 The medallion pattern (`bronze` → `silver` → `gold`) then layers the
 transformation:
@@ -42,40 +61,41 @@ transformation:
 - **Silver** deduplicates, joins, and fills gaps.
 - **Gold** conforms to the dimensional model and computes derived facts.
 
-None of this touches `raw`.
+None of this rewrites the dlt tables.
 
 ## The medallion layers
 
-### Raw (dlt-owned)
+### Bronze (dlt landing zone + dbt trust-filter views)
 
-`raw` is the landing zone, owned and managed entirely by dlt. Alongside the
-source tables (`coins_markets_raw`, `coin_market_chart_raw`, `fx_rates_raw`),
-dlt writes its own bookkeeping:
+`bronze` is both dlt's landing zone and the first dbt layer, sharing one
+schema. dlt owns the source tables (`coins_markets_raw`, `coin_market_chart_raw`,
+`fx_rates_raw`) and its bookkeeping:
 
 - `_dlt_loads` — every load attempt, with its status.
 - `_dlt_version` — schema versions.
 - `_dlt_pipeline_state` — the state that dlt uses to resume after failure.
-- `raw_staging` — temporary tables used during merge loads.
+- `bronze_staging` — temporary tables used during merge loads.
 
-Because dlt owns this schema completely and these tables are internal to dlt's
-operation, `raw` is kept as its own layer. Every other layer is dbt-owned.
-
-### Bronze (dbt views)
-
-Four views, each over its corresponding `raw` table:
+The bookkeeping tables belong to the same dlt dataset as the source tables, so
+they must live in the same schema. Rather than isolate them behind an extra
+`raw` layer, dlt lands in `bronze` directly and dbt adds four trust-filter
+views alongside:
 
 - `br_completed_loads` — a list of the load IDs that reached `status = 0`.
 - `br_coins_markets` — `coins_markets_raw` filtered to completed loads.
 - `br_coin_market_chart` — `coin_market_chart_raw` filtered to completed loads.
 - `br_fx_rates` — `fx_rates_raw` filtered to completed loads.
 
-An interrupted run leaves rows in `raw` whose load never completed. **Every
-bronze model inner-joins `br_completed_loads`** to exclude those rows, ensuring
+An interrupted run leaves rows whose load never completed. **Every bronze
+view inner-joins `br_completed_loads`** to exclude those rows, ensuring
 downstream facts never contain partial or stale data.
 
-Materializing bronze as views is correct: each is a thin filter over raw, and
-views occupy no disk space (unlike a physical materialisation which would
-duplicate the whole landing zone).
+Materializing bronze as views is correct: each is a thin filter over a dlt
+table, and views occupy no disk space (unlike a physical materialisation which
+would duplicate the whole landing zone). Object-name convention keeps the two
+owners apart: dlt owns `*_raw` and `_dlt_*`, dbt owns `br_*`; the yml source
+declarations live in `transform/models/sources/`, separate from the dbt
+models in `transform/models/bronze/`.
 
 ### Silver (dbt views + one table)
 
@@ -120,17 +140,21 @@ Ten tables split into three groups:
 - `mart_coin_performance` — (coin, currency), trailing returns and volatility.
 - `mart_market_overview` — (date, currency), market breadth and sentiment.
 
-## Why `raw` is separate from `bronze`
+## Why dlt and dbt share the `bronze` schema
 
-dlt fully owns `raw`. If we modelled it as bronze, dbt would have to manage the
-dlt-internal tables (`_dlt_*`, `raw_staging`), and those would live in a dbt
-schema alongside user-facing data. That mixing violates the separation principle.
+dlt binds one dataset per pipeline. The source tables (`*_raw`), dlt's
+bookkeeping (`_dlt_loads`, `_dlt_version`, `_dlt_pipeline_state`), and the
+`<dataset>_staging` merge schema all land in the same dataset and cannot be
+split across schemas. An earlier version of this project paid for that
+constraint with a separate `raw` layer that existed only to isolate ~4
+bookkeeping tables from dbt.
 
-Instead, `raw` stays dlt-only, and `bronze` lives entirely in a dbt-owned
-schema. `bronze` views filter `raw` — a thin, declarative layer that never
-touches dlt's internals.
-
-This separation is why the pipeline is **dbt-owned** once it leaves dlt.
+The simpler design: point dlt at `bronze` directly, and let the dbt `br_*`
+views sit in the same schema alongside the dlt tables. Separation is by
+object-name convention rather than by schema — dlt owns `*_raw` and `_dlt_*`
+(never modelled by hand), dbt owns `br_*` (the trust-filter views), and the
+ymls declaring the dlt source are parked in `transform/models/sources/`
+separate from the dbt models in `transform/models/bronze/`.
 
 ## The `br_completed_loads` trust boundary
 
@@ -141,11 +165,10 @@ load never reached `status = 0`. Those rows are orphaned and must be excluded.
 Every bronze model inner-joins the model `br_completed_loads`:
 
 ```sql
-with completed_loads as (
-    select load_id from raw._dlt_loads where status = 0
+    select load_id from bronze._dlt_loads where status = 0
 )
 select *
-from raw.coins_markets_raw
+from bronze.coins_markets_raw
 inner join completed_loads
     on _dlt_load_id = load_id
 ```
@@ -277,7 +300,7 @@ filter.
 
 ### Source freshness
 
-`raw.coins_markets_raw` declares freshness:
+`bronze.coins_markets_raw` declares freshness:
 
 ```yaml
 loaded_at_field: _ingested_at

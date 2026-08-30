@@ -1,4 +1,4 @@
-"""CoinGecko raw-layer resources.
+"""CoinGecko resources.
 
 Two resources with deliberately different shapes:
 

@@ -3,6 +3,8 @@
 A guided walkthrough for people new to data engineering. Nine modules, nine
 exercises with solutions. ~3.5 hours with breaks.
 
+We won't be utilizing the `ct` wrapper script on this session to make sure you are getting used with the tool's common commands.
+
 ## Who this is for
 
 You are comfortable with:
@@ -16,23 +18,145 @@ data platform. That is fine — each is introduced as it appears.
 
 ## Before the session
 
-**Install prereqs at home, not in the room.** The first `uv run ct run` is ~4
-minutes of rate-limited HTTP. A room full of people hitting CoinGecko from one
-NAT will hit 429s and frustrate everyone.
+**Install the prerequisites,** the first full pipeline run is ~4
+minutes of rate-limited HTTP 
+
+This workshop utilize various different tools such as: 
+1. `dlt` (through a Python module), 
+2. `dbt`,
+3. `airflow`, 
+4. DuckDB. 
+
+No need to install them all by yourself 1-by-1, you can rely on the `UV` to create a virtual environtment (more detail mentioned below).
+
+### Tools you install at home
+
+You install two tools. Everything else — Airflow 3.3.1, dbt-core 1.12.3, dbt-duckdb 1.11.0, dlt 1.30.0, DuckDB 1.5.5 — arrives pinned inside the `.venv` the repo creates via `uv sync`. No manual installs of those, no API keys required.
+
+| Tool | Why | Install (macOS) | Install (Windows) | Install (Ubuntu/Debian) |
+|---|---|---|---|---|
+| `uv` | Creates the venv, installs the pinned stack, and runs every command below | `brew install uv` | `winget install astral-sh.uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` (or `sudo apt install uv` after [adding the uv apt repo](https://docs.astral.sh/uv/getting-started/installation/)) |
+| `git` | Cloning the repo | `xcode-select --install` (bundled with the Xcode Command Line Tools) | `winget install Git.Git` (or install [Git for Windows](https://git-scm.com/download/win)) | `sudo apt install git` |
+
+### Step 0 — one-time environment setup
 
 ```bash
-# 1. install uv and git (see README.md "Prerequisites")
-# 2. clone the repo and run the full setup
+# 1. clone the repo
 git clone <repo-url> && cd crypto-tracker
-uv run ct setup
-uv run ct airflow-init
-uv run ct run            # take a coffee break; this is the slow one
-uv run ct tables         # did it work?
-uv run ct portfolio      # did it work? 9 rows of currency, value, P&L
+
+# 2. create the virtualenv from the lockfile
+uv sync
+
+# 3. activate it. This puts `dbt`, `airflow`, and the project `python` on PATH.
+#    Activation is not optional cosmetics: `airflow standalone` spawns its
+#    scheduler and webserver children by bare name, so they must resolve on PATH.
+source .venv/bin/activate
 ```
 
-If `uv run ct tables` shows non-zero rows in all four schemas (`raw`, `bronze`,
-`silver`, `gold`) and `uv run ct portfolio` prints 9 rows, you are ready.
+Every command in this document assumes the venv is active. If you prefer not to
+activate, prefix each command with `.venv/bin/` (e.g. `.venv/bin/dbt`), except
+the Airflow ones, which need the venv on PATH anyway.
+
+**On Windows (PowerShell)**, the activation script and binary paths differ.
+Use these in place of the POSIX forms above:
+
+```powershell
+# activate the venv
+.venv\Scripts\Activate.ps1
+
+# if you prefer not to activate, run tools by absolute path:
+.venv\Scripts\python.exe -m scripts.duckdb_cli tables
+# Airflow still needs the venv on PATH either way:
+$env:PATH = "$PWD\.venv\Scripts;$env:PATH"
+```
+
+### Step 0b — environment variables
+
+Run these from the repo root in every new shell (or add them to your shell
+profile):
+
+```bash
+# Airflow keeps its metadata DB, logs, and generated password inside the repo
+# instead of ~/airflow, so a `rm -rf .airflow` fully resets it.
+export AIRFLOW_HOME="$PWD/.airflow"
+
+# Without this, Airflow ships ~50 example DAGs into your UI and hides ours.
+export AIRFLOW__CORE__LOAD_EXAMPLES=False
+
+# Lets `python -m ingest.run_ingest` and `python -m scripts.duckdb_cli` import
+# the repo packages regardless of which directory you are standing in.
+export PYTHONPATH="$PWD"
+
+# OPTIONAL: your own coin/currency choices. Nothing auto-loads .env, so source
+# it yourself. First time only: copy the template, then edit it. Skip the
+# whole block and the defaults in ingest/__init__.py apply (10 coins,
+# 8 fiat currencies). Only CRYPTO_TRACKED_COINS, CRYPTO_FIAT_CURRENCIES,
+# CRYPTO_LOG_LEVEL, and INTER_COIN_SLEEP_SECONDS are meant to be set this way.
+cp .env.example .env   # first time only; edit your coins/currencies in it
+set -a; source .env; set +a
+```
+
+`CRYPTO_DB_PATH` is deliberately **not** exported here. Both the ingest code and
+the DuckDB helper fall back to the repo's `data/crypto.duckdb`. Only dbt needs
+it, and it is exported inside the dbt section below where the correct relative
+path is obvious.
+
+**On Windows (PowerShell)**, the equivalents are:
+
+```powershell
+$env:AIRFLOW_HOME               = "$PWD\.airflow"
+$env:AIRFLOW__CORE__LOAD_EXAMPLES = "False"
+$env:PYTHONPATH                 = "$PWD"
+
+# OPTIONAL: your own coin/currency choices
+Copy-Item .env.example .env     # first time only; edit it
+Get-Content .env | ForEach-Object {
+    if ($_ -match '^\s*([^#][^=]*)=(.*)$') {
+        [System.Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process')
+    }
+}
+```
+
+### Step 0c — initialise Airflow
+
+```bash
+airflow db migrate
+airflow pools set duckdb_writer 1 "Serializes DuckDB write access"
+```
+
+The pool is not optional decoration: both DAG tasks declare
+`pool="duckdb_writer"`, so without this 1-slot pool they would queue forever.
+It serialises the two tasks so they never hold the DuckDB write lock at the
+same time (Module 8, Exercise 3).
+
+No `airflow users create` here on purpose: `airflow standalone` (Module 8)
+auto-generates an admin password and writes it to
+`$AIRFLOW_HOME/simple_auth_manager_passwords.json.generated`.
+
+### Step 1 — load source data (dlt)
+
+```bash
+python -m ingest.run_ingest   # take a coffee break; this is the slow one
+```
+
+### Step 2 — build the models (dbt)
+
+```bash
+cd transform
+export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb"
+dbt build --profiles-dir .
+cd ..
+```
+
+### Step 3 — did it work?
+
+```bash
+python -m scripts.duckdb_cli tables       # every schema and row count
+python -m scripts.duckdb_cli portfolio    # 9 rows of currency, value, P&L
+```
+
+If `tables` shows non-zero rows in all three schemas (`bronze`, `silver`,
+`gold`) and `portfolio` prints 9 rows, you are ready.
 
 ## Suggested timing
 
@@ -69,8 +193,8 @@ now dominant because:
   data).
 - Warehouses are fast and cheap — putting the data there once and reusing it
   beats re-extracting.
-- The raw layer is a backup: if your transformation breaks, the source data is
-  still safe.
+- The dlt tables are a backup: if your transformation breaks, the source data
+  is still safe.
 
 ### In this repo
 
@@ -81,12 +205,33 @@ bronze/silver/gold. One orchestrator: Airflow.
 ### Try it
 
 ```bash
-uv run ct tables         # see every schema and row count
-uv run ct run            # re-run the pipeline and watch the log
+python -m scripts.duckdb_cli tables   # see every schema and row count
 ```
 
-Notice the order: ingest (dlt) runs first, then dbt builds the layers on top.
-dbt is downstream of dlt.
+Now re-run the pipeline and watch the log. It is **two separate tools**, run one
+after the other — this repo never hides that behind a single command:
+
+**Step A — ingest (dlt).** A Python program that calls the APIs and lands the
+source tables. dlt is a library, not a CLI: you run the project's own module.
+
+
+```bash
+python -m ingest.run_ingest
+```
+
+**Step B — transform (dbt).** A separate tool with its own project directory,
+`transform/`, that reshapes what dlt landed. It never touches the APIs.
+
+```bash
+cd transform
+export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb"
+dbt build --profiles-dir .
+cd ..
+```
+
+dbt is downstream of dlt. Nothing in dbt can run before dlt has landed the
+source tables, which is exactly why they are two commands and not one.
+
 
 ### Exercise
 
@@ -118,10 +263,14 @@ wrapped into sources and loaded by `ingest/run_ingest.py`.
 ### Try it
 
 ```bash
-uv run ct ingest         # re-run ingest; should be fast on second run (incremental)
+# re-run ingest only; fast on the second run because dlt loads incrementally
+python -m ingest.run_ingest
 ls data/            # the DuckDB file grew slightly
-.venv/bin/python -m scripts.duckdb_cli sql "select count(*) from raw.coins_markets_raw"
+python -m scripts.duckdb_cli sql "select count(*) from bronze.coins_markets_raw"
+
 ```
+
+No dbt here on purpose: this is the load half of ELT, and it stands alone.
 
 ### Exercise
 
@@ -143,15 +292,17 @@ why the Airflow tasks share a 1-slot pool (Module 8) and why you must close
 your shell before re-running the pipeline.
 
 ### In this repo
+The file is at `data/crypto.duckdb`. dlt writes directly to the `bronze`
+schema; dbt adds its `br_*` views there and materializes silver/gold into
+their own schemas (DuckDB calls these "databases" — each is a separate
+namespace within the file).
 
-The file is at `data/crypto.duckdb`. dlt writes to the `raw` schema; dbt
-materializes bronze/silver/gold into their own schemas (DuckDB calls these
-"databases" — each is a separate namespace within the file).
 
 ### Try it
 
 ```bash
-uv run ct query-ro       # read-only shell
+# read-only shell; --readonly keeps you from taking the write lock
+python -m scripts.duckdb_cli shell --readonly
 .tables             # list every table/view
 .schema gold.dim_coin   # show the CREATE statement
 ```
@@ -186,10 +337,30 @@ materialization (bronze/silver = view, gold = table).
 
 ### Try it
 
+dbt is its own tool with its own project root. Every dbt command is run from
+`transform/`, and needs two things that are easy to forget:
+
+- `CRYPTO_DB_PATH`, because `transform/profiles.yml` reads
+  `{{ env_var('CRYPTO_DB_PATH') }}` and has no default — dbt errors out without it.
+- `--profiles-dir .`, because the profile lives in the project directory, not in
+  the default `~/.dbt/`.
+
 ```bash
-uv run ct dbt            # build + test the medallion
-uv run ct docs           # serve the lineage graph on :8081
+cd transform
+export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb"
+
+dbt build --profiles-dir .            # build + test the medallion
+dbt docs generate --profiles-dir .    # build the lineage metadata
+dbt docs serve --port 8081 --profiles-dir .
 # open http://localhost:8081 and click around the DAG
+```
+
+Other dbt subcommands you will use later, same directory, same flags:
+
+```bash
+dbt run --profiles-dir .                    # models only, no tests
+dbt test --profiles-dir .                   # tests only
+dbt build --full-refresh --profiles-dir .   # rebuild incremental models from scratch
 ```
 
 The lineage graph is the moment the project becomes visual. Every node is a
@@ -216,16 +387,16 @@ The discipline is: each layer is a peer-reviewed transition. If a fact
 moves to gold. No back-edges, no skipping layers.
 
 ### In this repo
+- **bronze** (4 views): filters the dlt tables (in the same `bronze` schema) to completed loads.
 
-- **bronze** (4 views): filters `raw` to completed loads.
 - **silver** (4 models): types, dedupes, fills gaps.
 - **gold** (10 tables): dims, facts, marts.
 
 ### Try it
 
 ```bash
-uv run ct tables
-# look at row counts at each layer; bronze/silver should roughly match raw,
+python -m scripts.duckdb_cli tables
+# look at row counts at each layer; bronze views should roughly match the dlt tables,
 # and gold should have derived numbers (facts, marts) with much higher counts
 # because of the cross-join fan-out in mart_portfolio_value_daily
 ```
@@ -270,7 +441,7 @@ load-bearing: it guarantees the star schema is real, not decorative.
 ### Try it
 
 ```bash
-uv run ct query-ro
+python -m scripts.duckdb_cli shell --readonly
 .schema gold.fct_coin_price_daily
 # look at the comment in fct_coin_price_daily.sql:
 # "delete+insert rather than merge because whole-day partitions are replaced
@@ -300,23 +471,26 @@ A test that "always passes" is not a test — it is decoration. Tests must be
 able to fail, and they must fail loudly enough that you notice.
 
 ### In this repo
-
 75 declared tests (51 not_null, 16 relationships, 7 unique, 1 accepted_values)
 plus the singular test in `transform/tests/assert_no_future_price_dates.sql`.
-Source freshness is configured on `raw.coins_markets_raw` (warn after 26
+Source freshness is configured on `bronze.coins_markets_raw` (warn after 26
 hours).
 
 ### Try it
 
 ```bash
-uv run ct test
+cd transform
+export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb"
+
+dbt test --profiles-dir .
 # all green? try breaking one
-sed -i.tmp 's/where price_date >= current_date/where price_date < current_date/' transform/tests/assert_no_future_price_dates.sql
-rm transform/tests/assert_no_future_price_dates.sql.tmp
-uv run ct test           # should fail with 3650+ rows
+sed -i.tmp 's/where price_date >= current_date/where price_date < current_date/' tests/assert_no_future_price_dates.sql
+rm tests/assert_no_future_price_dates.sql.tmp
+dbt test --profiles-dir .   # should fail with 3650+ rows
 # revert
-git checkout transform/tests/assert_no_future_price_dates.sql
-uv run ct test           # green again
+git checkout tests/assert_no_future_price_dates.sql
+dbt test --profiles-dir .   # green again
+cd ..
 ```
 
 ### Exercise
@@ -348,12 +522,36 @@ imports from `airflow.sdk`, `schedule` instead of `schedule_interval`, and
 
 ### Try it
 
+Airflow needs `AIRFLOW_HOME` exported (Step 0b) so it finds this repo's
+metadata DB and the `dags/` folder instead of `~/airflow`.
+
 ```bash
-uv run ct dag-test       # run the DAG end-to-end without a scheduler
-uv run ct airflow-ui     # start scheduler + web UI on :8080 (foreground)
-uv run ct creds          # get the admin password
+# run the DAG end-to-end without a scheduler
+airflow dags reserialize      # pick up any edits to dags/*.py
+airflow dags test crypto_tracker_daily
+
+# start scheduler + web UI on :8080 (foreground; Ctrl-C to stop)
+airflow standalone
+```
+
+In another terminal, get the generated admin password:
+
+```bash
+cat "$AIRFLOW_HOME/simple_auth_manager_passwords.json.generated"
+```
+
+```text
 # log in at http://localhost:8080, find crypto_tracker_daily, click "Graph"
 # Admin -> Pools -> see duckdb_writer with 1 slot
+```
+
+Other Airflow commands you will want:
+
+```bash
+airflow dags unpause crypto_tracker_daily      # let the schedule fire
+airflow dags pause crypto_tracker_daily        # stop it firing
+airflow dags trigger crypto_tracker_daily      # run it now via the scheduler
+airflow dags list-runs crypto_tracker_daily    # recent run states
 ```
 
 ### Exercise
@@ -387,7 +585,7 @@ market breadth & sentiment, multi-currency FX sensitivity, intraday liquidity
 ### Try it
 
 ```bash
-uv run ct query-ro
+python -m scripts.duckdb_cli shell --readonly
 # paste this:
 .mode line
 select currency_code, round(total_value_local, 2), round(total_unrealized_pnl_pct, 2)
@@ -419,11 +617,16 @@ solution (click to reveal).
    ```bash
    curl -s 'https://api.coingecko.com/api/v3/search?query=tron' | python -m json.tool | head -30
    ```
-2. Add the slug to `CRYPTO_TRACKED_COINS` in `.env` (comma-separated).
-3. Re-run the pipeline: uv run ct ingest && `uv run ct dbt`.
-4. Check: `uv run ct performance` — is the new symbol there?
+2. Add the slug to `CRYPTO_TRACKED_COINS` in `.env` (comma-separated), then
+   re-export it so this shell sees the change: `set -a; source .env; set +a`.
+3. Re-run the pipeline — two tools, in order:
+   ```bash
+   python -m ingest.run_ingest   # dlt: fetch the coin, land it in bronze
+   cd transform && export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb" && dbt build --profiles-dir . && cd ..
+   ```
+4. Check: `python -m scripts.duckdb_cli performance` — is the new symbol there?
 
-**Done when:** the new symbol appears in `uv run ct performance` output.
+**Done when:** the new symbol appears in the `performance` output.
 
 <details><summary>Solution</summary>
 
@@ -433,14 +636,27 @@ solution (click to reveal).
 CRYPTO_TRACKED_COINS=bitcoin,ethereum,solana,cardano,ripple,polkadot,chainlink,dogecoin,avalanche-2,litecoin,tron
 ```
 
-Then uv run ct ingest && uv run ct dbt && `uv run ct performance`. The new symbol should
-appear in the trailing-returns table.
+Then, after sourcing `.env` again:
+
+```bash
+python -m ingest.run_ingest
+cd transform && export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb" && dbt build --profiles-dir . && cd ..
+python -m scripts.duckdb_cli performance
+```
+
+The new symbol should appear in the trailing-returns table.
 
 **Watch out:** `ingest/run_ingest.py` decides the history window per **table**,
 not per coin. If the warehouse already has any data, it fetches only a 2-day
 window for every coin (including the new one), not a 365-day backfill. To get
-full history for the new coin, run uv run ct clean-db && `uv run ct run` and accept the
-~4-minute re-ingest.
+full history for the new coin, wipe both stores —
+
+```bash
+rm -f data/crypto.duckdb data/crypto.duckdb.wal
+rm -rf ~/.dlt/pipelines/crypto_tracker
+```
+
+— then re-run ingest and dbt, and accept the ~4-minute re-ingest.
 
 </details>
 
@@ -495,7 +711,7 @@ print(pipeline.last_trace.last_normalize_info)
 Run `python /tmp/trap.py`, then:
 
 ```bash
-.venv/bin/python -m scripts.duckdb_cli shell --readonly --db /tmp/trap.duckdb
+python -m scripts.duckdb_cli shell --readonly --db /tmp/trap.duckdb
 describe trap_unfixed.price;     -- two columns: price BIGINT, price__v_double DOUBLE
 describe trap_fixed.price;       -- one column: price DECIMAL(38,18)
 ```
@@ -513,8 +729,8 @@ before dlt ever inspects the row. See `_coerce_numerics` and `_to_decimal`.
 
 **Steps:**
 
-1. Terminal A: `uv run ct query` (read-write shell — it stays open).
-2. Terminal B: `uv run ct tables`.
+1. Terminal A: `python -m scripts.duckdb_cli shell` (read-write shell — it stays open).
+2. Terminal B: `python -m scripts.duckdb_cli tables`.
 3. Read the error: `IO Error: Could not set lock on file ... Conflicting lock is held ...`.
 4. In Terminal A, press Ctrl-D to exit.
 5. Re-run Terminal B: it succeeds.
@@ -527,7 +743,7 @@ watched the second command succeed once A quits.
 Terminal A:
 
 ```bash
-uv run ct query
+python -m scripts.duckdb_cli shell
 ```
 
 The shell opens and waits at the prompt. While it's open, it holds an exclusive
@@ -536,7 +752,7 @@ lock on the DuckDB file.
 Terminal B:
 
 ```bash
-uv run ct tables
+python -m scripts.duckdb_cli tables
 ```
 
 Output (paths abbreviated):
@@ -549,14 +765,23 @@ See also https://duckdb.org/docs/stable/connect/concurrency
 Close it first - Ctrl-D in that shell, or quit 'uv run ct ui'.
 ```
 
+That last line is printed verbatim by `scripts/duckdb_cli.py`; it names the
+repo's optional `ct` helper, but the process actually holding the lock here is
+your `shell` in Terminal A (or a `python -m scripts.duckdb_cli ui` session,
+which is read-write and holds the lock until you Ctrl-C it).
+
 Quit Terminal A (Ctrl-D), then Terminal B succeeds.
 
 The production answer to this in `dags/crypto_tracker_daily.py` is the
 `pool="duckdb_writer"` parameter on both tasks. A 1-slot pool guarantees no two
-tasks can hold the file at once. The `ct check-lock` subcommand (not in
-`uv run ct help`; it's a private prerequisite of `tables`, `portfolio`, and
-`performance`) delegates to `scripts/duckdb_cli.py` to turn the raw `IOError`
-into an actionable message.
+tasks can hold the file at once. You can probe the lock yourself before running
+anything heavy:
+
+```bash
+python -m scripts.duckdb_cli check-lock   # exit 0 = free, exit 1 = held
+```
+
+It turns the raw `IOError` into an actionable message instead of a stack trace.
 
 </details>
 
@@ -580,7 +805,10 @@ into an actionable message.
    ```yaml
      data_tests: [not_null]
    ```
-4. Run `uv run ct dbt`.
+4. Rebuild with dbt:
+   ```bash
+   cd transform && export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb" && dbt build --profiles-dir . && cd ..
+   ```
 
 **Done when:** `select coin_id, days_since_first_price from gold.dim_coin` returns
 sensible integers (between 0 and ~365).
@@ -616,10 +844,10 @@ cross join latest_snapshot_ts
         data_tests: [not_null]
 ```
 
-`uv run ct dbt` rebuilds the model and the test. Verify:
+That `dbt build` rebuilds the model and the test. Verify:
 
 ```bash
-.venv/bin/python -m scripts.duckdb_cli sql "select coin_id, days_since_first_price from gold.dim_coin order by days_since_first_price desc"
+python -m scripts.duckdb_cli sql "select coin_id, days_since_first_price from gold.dim_coin order by days_since_first_price desc"
 ```
 
 </details>
@@ -634,12 +862,16 @@ cross join latest_snapshot_ts
 
 1. Write a singular test that asserts `fct_coin_price_daily` contains no rows
    with `price_date >= current_date`.
-2. Run `uv run ct test`. The new test should pass.
+2. Run the tests:
+   ```bash
+   cd transform && export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb" && dbt test --profiles-dir . && cd ..
+   ```
+   The new test should pass.
 3. Temporarily invert the test to `where price_date < current_date`. Re-run
-   `uv run ct test`. Confirm it fails with a row count.
+   the same `dbt test`. Confirm it fails with a row count.
 4. Revert.
 
-**Done when:** `uv run ct test` reports `PASS` for the new test, and the inverted
+**Done when:** `dbt test` reports `PASS` for the new test, and the inverted
 version reports a `FAIL` with a non-zero row count.
 
 <details><summary>Solution</summary>
@@ -654,10 +886,10 @@ from {{ ref('fct_coin_price_daily') }}
 where price_date >= current_date
 ```
 
-`uv run ct test` should include `assert_no_future_price_dates` in its 80 tests and
+`dbt test` should include `assert_no_future_price_dates` in its 80 tests and
 report `PASS=80 ERROR=0`.
 
-Invert to `where price_date < current_date`: `uv run ct test` reports
+Invert to `where price_date < current_date`: `dbt test` reports
 `FAIL 3650` (10 coins × 365 days) and `ERROR=1`.
 
 Revert and confirm green again.
@@ -673,10 +905,13 @@ Revert and confirm green again.
 **Steps:**
 
 1. Add a row. Format: `holding_id,coin_id,quantity,acquired_date,cost_basis_usd`.
-2. Run `uv run ct dbt`.
-3. Check: `uv run ct portfolio` — does it now show 4 holdings?
+2. Rebuild the seed and its downstream models:
+   ```bash
+   cd transform && export CRYPTO_DB_PATH="$PWD/../data/crypto.duckdb" && dbt build --profiles-dir . && cd ..
+   ```
+3. Check: `python -m scripts.duckdb_cli portfolio` — does it now show 4 holdings?
 
-**Done when:** `uv run ct portfolio` shows `holdings_count = 4`.
+**Done when:** the `portfolio` output shows `holdings_count = 4`.
 
 <details><summary>Solution</summary>
 
@@ -690,7 +925,7 @@ holding_id,coin_id,quantity,acquired_date,cost_basis_usd
 4,chainlink,120.0,2026-03-01,1800.00
 ```
 
-Then uv run ct dbt && `uv run ct portfolio`.
+Then `dbt build --profiles-dir .` and `python -m scripts.duckdb_cli portfolio`.
 
 **Two non-obvious points:**
 
@@ -711,9 +946,11 @@ Then uv run ct dbt && `uv run ct portfolio`.
 
 **Steps:**
 
-1. `uv run ct dag-test` (no scheduler needed).
-2. `uv run ct airflow-ui` (foreground; let it start the scheduler and webserver).
-3. `uv run ct creds` in another terminal to get the admin password.
+1. `airflow dags reserialize && airflow dags test crypto_tracker_daily`
+   (no scheduler needed).
+2. `airflow standalone` (foreground; let it start the scheduler and webserver).
+3. `cat "$AIRFLOW_HOME/simple_auth_manager_passwords.json.generated"` in another
+   terminal to get the admin password.
 4. Log in at <http://localhost:8080>.
 5. Find `crypto_tracker_daily`. Open the **Graph** view.
 6. Go to **Admin → Pools**. Find `duckdb_writer` with 1 slot.
@@ -723,7 +960,7 @@ can never run concurrently.
 
 <details><summary>Solution</summary>
 
-`uv run ct dag-test` runs `airflow dags test crypto_tracker_daily` end-to-end. It
+`airflow dags test crypto_tracker_daily` runs the DAG end-to-end. It
 returns the task states and exit codes. The two tasks `ingest_raw` and
 `dbt_build` are visible in the Graph view as boxes connected by an arrow
 showing `ingest_raw >> dbt_build`.
@@ -749,19 +986,19 @@ throughput.
 
 1. Find the final line of the `crypto_tracker_daily()` function:
    `ingest_raw() >> dbt_build()`. Reverse it to `dbt_build() >> ingest_raw()`.
-2. Run `uv run ct dag-test`.
+2. Run `airflow dags reserialize && airflow dags test crypto_tracker_daily`.
 3. Read the error or observe the result. Why is this wrong?
 4. Revert: `ingest_raw() >> dbt_build()`.
-5. Run `uv run ct dag-test` again. Confirm it passes.
+5. Run `airflow dags reserialize && airflow dags test crypto_tracker_daily`
+   again. Confirm it passes.
 
 **Done when:** you can explain why the order matters even though both tasks
 share one pool slot (the pool serialises, it does not sequence).
 
 <details><summary>Solution</summary>
 
-Reversing the order makes `dbt_build` run **before** `ingest_raw`. dbt will
 either build against the previous run's data (silently stale) or fail on a
-fresh warehouse (no `raw` data, the bronze models' inner joins return nothing).
+fresh warehouse (no data at all, the bronze models' inner joins return nothing).
 
 The pool gate is **not** a substitute for explicit dependencies. A 1-slot pool
 guarantees one-at-a-time, but it does not say *which order* they run in. Only
@@ -774,7 +1011,7 @@ Revert:
 ingest_raw() >> dbt_build()
 ```
 
-`uv run ct dag-test` should now succeed.
+`airflow dags reserialize && airflow dags test crypto_tracker_daily` should now succeed.
 
 </details>
 
@@ -787,7 +1024,7 @@ multi-currency conversion, and a history filter.
 
 **Steps:**
 
-1. Open `uv run ct query-ro`.
+1. Open `python -m scripts.duckdb_cli shell --readonly`.
 2. Write a query against `gold.mart_coin_performance` that returns the top 3
    coins by 30-day return, priced in IDR, excluding coins with fewer than 90
    days of history.
@@ -810,7 +1047,7 @@ order by return_30d_pct desc
 limit 3;
 ```
 
-Run with `uv run ct query-ro`. Three rows; values in IDR; sorted by `return_30d_pct`
+Run with `python -m scripts.duckdb_cli shell --readonly`. Three rows; values in IDR; sorted by `return_30d_pct`
 descending. The `mart_coin_performance` model is built per (coin, currency),
 so filtering by `currency_code = 'IDR'` selects the IDR-denominated rows and
 `latest_price_local` is already converted via `stg_fx_rates_filled`.
@@ -822,7 +1059,7 @@ so filtering by `currency_code = 'IDR'` selects the IDR-denominated rows and
 
 Five directions, one line each:
 
-  `transform/profiles.yml` and re-run `uv run ct dbt`. The medallion model is
+  `transform/profiles.yml` and re-run `dbt build --profiles-dir .`. The medallion model is
   portable.
   project is currently all built-in generics on purpose.
   tests are deterministic and self-contained; no secrets needed.

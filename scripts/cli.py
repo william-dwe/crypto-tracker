@@ -109,7 +109,7 @@ _COMMANDS: list[tuple[str, str, str]] = [
     ("airflow-init", "Setup",       "migrate the Airflow DB and create the 1-slot DuckDB pool"),
     # Pipeline
     ("run",          "Pipeline",    "ingest then build everything (the usual command)"),
-    ("ingest",       "Pipeline",    "load CoinGecko + FX into the raw layer"),
+    ("ingest",       "Pipeline",    "load CoinGecko + FX into the bronze layer"),
     ("dbt",          "Pipeline",    "build + test silver and gold"),
     ("dbt-refresh",  "Pipeline",    "full-refresh rebuild of the incremental facts"),
     ("test",         "Pipeline",    "run dbt tests only, without rebuilding"),

@@ -1,2 +1,0 @@
-[console_scripts]
-ct = scripts.cli:main

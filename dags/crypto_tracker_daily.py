@@ -1,4 +1,4 @@
-"""Daily crypto tracker ELT: CoinGecko + Frankfurter -> raw -> bronze -> silver -> gold.
+"""Daily crypto tracker ELT: CoinGecko + Frankfurter -> bronze -> silver -> gold.
 
 Airflow 3 authoring: imports come from ``airflow.sdk``, ``schedule`` replaces
 ``schedule_interval``, and ``Asset`` replaces ``Dataset``.
@@ -29,8 +29,9 @@ DB_PATH = os.environ.get("CRYPTO_DB_PATH", str(REPO_ROOT / "data" / "crypto.duck
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# The ingest task lands in dlt's `raw` schema; dbt then owns bronze/silver/gold.
-RAW = Asset(name="crypto_raw", uri="duckdb://crypto.duckdb/raw")
+# The ingest task lands directly in dlt's `bronze` schema; dbt adds its `br_*`
+# views there and materializes silver/gold into their own schemas.
+BRONZE = Asset(name="crypto_bronze", uri="duckdb://crypto.duckdb/bronze")
 GOLD = Asset(name="crypto_gold", uri="duckdb://crypto.duckdb/gold")
 
 DUCKDB_POOL = "duckdb_writer"
@@ -54,7 +55,7 @@ def crypto_tracker_daily():
     @task(
         task_id="ingest_raw",
         pool=DUCKDB_POOL,
-        outlets=[RAW],
+        outlets=[BRONZE],
         # Absorbs CoinGecko 429s that outlive the in-resource backoff.
         retries=3,
         retry_delay=pendulum.duration(minutes=5),
