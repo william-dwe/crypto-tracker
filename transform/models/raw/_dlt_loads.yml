@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: _dlt_loads
+        description: >
+          dlt's own load ledger, not domain data. One row per load package;
+          `status = 0` means the load completed. Read only through
+          `br_completed_loads`, which is the single place that encodes that
+          status code.
+        columns:
+          - name: load_id
+            description: Joins to `_dlt_load_id` on every loaded table (names differ).

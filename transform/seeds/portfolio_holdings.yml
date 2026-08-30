@@ -1,0 +1,16 @@
+version: 2
+
+seeds:
+  - name: portfolio_holdings
+    description: "Portfolio lots. cost_basis_usd is the total paid for the lot, not a unit price."
+    columns:
+      - name: holding_id
+        data_tests: [not_null, unique]
+      - name: coin_id
+        description: Must match a CoinGecko coin id present in CRYPTO_TRACKED_COINS.
+        data_tests: [not_null]
+      - name: quantity
+        data_tests: [not_null]
+      - name: cost_basis_usd
+        description: Total USD paid for the lot.
+        data_tests: [not_null]

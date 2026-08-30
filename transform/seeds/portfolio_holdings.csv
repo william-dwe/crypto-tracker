@@ -1,0 +1,4 @@
+holding_id,coin_id,quantity,acquired_date,cost_basis_usd
+1,bitcoin,0.5,2025-11-15,42000.00
+2,ethereum,4.0,2025-12-02,11200.00
+3,solana,25.0,2026-01-20,4800.00

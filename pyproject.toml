@@ -1,0 +1,30 @@
+[project]
+name = "crypto-tracker"
+version = "1.0.0"
+description = "CoinGecko + FX ELT pipeline: dlt ingestion, DuckDB warehouse, dbt medallion layers, Airflow orchestration."
+requires-python = ">=3.11,<3.12"
+
+dependencies = [
+    "apache-airflow==3.3.1",
+    "dlt[duckdb]==1.30.0",
+    "dbt-core==1.12.3",
+    "dbt-duckdb==1.11.0",
+    "duckdb==1.5.5",
+    "pendulum>=3.1.0",
+    "requests>=2.32.0",
+]
+
+# NOTE: do not install with Airflow's constraints file. It pins pathspec==1.1.1,
+# which dbt-core cannot satisfy (it requires <1.1). Resolving without constraints
+# selects pathspec==1.0.4, which satisfies both, and the whole stack coexists in
+# a single virtualenv.
+
+[project.scripts]
+ct = "scripts.cli:main"
+
+[tool.setuptools]
+packages = ["ingest", "scripts"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

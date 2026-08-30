@@ -1,0 +1,11 @@
+crypto_tracker:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # Templated so a manual `dbt build` and the Airflow task always agree on
+      # which file they are writing to.
+      path: "{{ env_var('CRYPTO_DB_PATH') }}"
+      schema: main
+      # DuckDB is single-writer; more threads only creates lock contention.
+      threads: 1

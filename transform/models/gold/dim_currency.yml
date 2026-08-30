@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: dim_currency
+    description: "Conformed currency dimension. Grain: one row per currency."
+    columns:
+      - name: currency_key
+        description: Surrogate key, md5(currency_code).
+        data_tests: [not_null, unique]
+      - name: currency_code
+        data_tests:
+          - not_null
+          - unique
+          - accepted_values:
+              values: ['USD', 'EUR', 'GBP', 'JPY', 'IDR', 'SGD', 'AUD', 'CHF', 'CAD']
+      - name: is_base
+        description: True for USD, the base every rate is quoted against.
+        data_tests: [not_null]

@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: fx_rates_raw
+        description: >
+          USD-based FX rates from Frankfurter v2 pinned to the ECB provider.
+          No freshness check: ECB does not publish on weekends or TARGET
+          holidays, so any threshold would false-alarm every Saturday.

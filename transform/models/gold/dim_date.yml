@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: "Calendar dimension spanning the price history plus one year."
+    columns:
+      - name: date_key
+        description: YYYYMMDD integer.
+        data_tests: [not_null, unique]
+      - name: full_date
+        data_tests: [not_null, unique]
+      - name: is_weekend
+        data_tests: [not_null]

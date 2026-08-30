@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: fct_coin_price_daily
+    description: "Core fact. Grain: one row per (coin, date)."
+    columns:
+      - name: coin_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_coin')
+              field: coin_key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+      - name: price_usd
+        data_tests: [not_null]
+      - name: daily_return_pct
+        description: Null on a coin's first observed day, where there is no prior price.

@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: mart_market_overview
+    description: "Market breadth and totals. Grain: one row per (date, currency)."
+    columns:
+      - name: currency_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_currency')
+              field: currency_key
+      - name: tracked_coins
+        data_tests: [not_null]
+      - name: top_gainer_coin_id
+        description: Coin with the highest daily return that day.

@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: mart_portfolio_summary
+    description: "Whole-portfolio rollup. Grain: one row per (date, currency)."
+    columns:
+      - name: currency_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_currency')
+              field: currency_key
+      - name: total_value_local
+        data_tests: [not_null]
+      - name: holdings_count
+        data_tests: [not_null]
+      - name: day_over_day_change_pct
+        description: Null on each currency's first date, where there is no prior value.

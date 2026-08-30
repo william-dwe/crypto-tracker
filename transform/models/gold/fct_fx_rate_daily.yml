@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: fct_fx_rate_daily
+    description: "FX fact on a gapless calendar spine. Grain: one row per (date, currency)."
+    columns:
+      - name: currency_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_currency')
+              field: currency_key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+      - name: rate_to_usd
+        data_tests: [not_null]
+      - name: is_filled
+        description: True when carried forward across an ECB non-publication day.
+        data_tests: [not_null]

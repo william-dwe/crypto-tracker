@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: stg_fx_rates_filled
+    description: >
+      FX rates forward-filled onto the crypto calendar spine, closing ECB's
+      weekend and holiday gaps. Grain: (rate_date, quote_currency).
+    columns:
+      - name: rate_date
+        data_tests: [not_null]
+      - name: quote_currency
+        data_tests: [not_null]
+      - name: rate_to_usd
+        data_tests: [not_null]
+      - name: is_filled
+        description: True when the rate was carried forward, not published that day.
+        data_tests: [not_null]

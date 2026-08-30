@@ -1,0 +1,16 @@
+LICENSE
+README.md
+pyproject.toml
+crypto_tracker.egg-info/PKG-INFO
+crypto_tracker.egg-info/SOURCES.txt
+crypto_tracker.egg-info/dependency_links.txt
+crypto_tracker.egg-info/entry_points.txt
+crypto_tracker.egg-info/requires.txt
+crypto_tracker.egg-info/top_level.txt
+ingest/__init__.py
+ingest/coingecko.py
+ingest/fx.py
+ingest/run_ingest.py
+scripts/__init__.py
+scripts/cli.py
+scripts/duckdb_cli.py

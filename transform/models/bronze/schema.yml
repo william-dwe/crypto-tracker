@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: br_completed_loads
+    description: >
+      dlt load ids whose load package completed (`status = 0`). The single place
+      that encodes that status code.
+    columns:
+      - name: load_id
+        data_tests: [not_null, unique]
+
+  - name: br_coins_markets
+    description: "Market snapshots from completed loads only. Grain unchanged from raw."
+    columns:
+      - name: id
+        data_tests: [not_null]
+      - name: _dlt_load_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('br_completed_loads')
+              field: load_id
+
+  - name: br_coin_market_chart
+    description: "Daily history from completed loads only. Grain unchanged from raw."
+    columns:
+      - name: coin_id
+        data_tests: [not_null]
+      - name: _dlt_load_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('br_completed_loads')
+              field: load_id
+
+  - name: br_fx_rates
+    description: "FX rates from completed loads only. Grain unchanged from raw."
+    columns:
+      - name: quote
+        data_tests: [not_null]
+      - name: _dlt_load_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('br_completed_loads')
+              field: load_id

@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: mart_coin_performance
+    description: "Trailing returns and volatility. Grain: one row per (coin, currency)."
+    columns:
+      - name: coin_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_coin')
+              field: coin_key
+      - name: currency_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_currency')
+              field: currency_key
+      - name: latest_price_usd
+        data_tests: [not_null]
+      - name: market_cap_rank
+        description: >
+          Published only on the snapshot endpoint, so it is left-joined from
+          fct_coin_snapshot and is null for a coin never seen in a snapshot.
+      - name: return_90d_pct
+        description: Null until a coin has 90 days of history.

@@ -1,0 +1,37 @@
+name: crypto_tracker
+version: '1.0.0'
+config-version: 2
+
+profile: crypto_tracker
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  crypto_tracker:
+    # Views: bronze adds a completed-loads filter, not a physical copy, so
+    # materializing it would duplicate the whole landing zone on disk.
+    bronze:
+      +schema: bronze
+      +materialized: view
+    silver:
+      +schema: silver
+      +materialized: view
+    gold:
+      +schema: gold
+      +materialized: table
+
+seeds:
+  crypto_tracker:
+    +schema: gold
+    portfolio_holdings:
+      +column_types:
+        holding_id: integer
+        coin_id: varchar
+        quantity: decimal(38,18)
+        acquired_date: date
+        cost_basis_usd: decimal(38,18)

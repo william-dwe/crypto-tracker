@@ -1,0 +1,15 @@
+.venv/
+data/
+.airflow/
+.dlt/secrets.toml
+transform/target/
+transform/logs/
+transform/dbt_packages/
+__pycache__/
+*.py[cod]
+*.duckdb
+*.duckdb.wal
+.env
+
+# dbt's local anonymous usage id
+transform/.user.yml

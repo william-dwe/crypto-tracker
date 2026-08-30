@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      dlt's landing zone. dlt owns this schema entirely — alongside the source
+      tables it maintains `_dlt_loads`, `_dlt_version`, `_dlt_pipeline_state`
+      and a `raw_staging` schema for merge loads. Nothing here is dbt-managed.
+    schema: raw
+    tables:
+      - name: coins_markets_raw
+        description: >
+          Point-in-time market snapshot from /coins/markets, one row per coin per
+          pipeline run. Append-only; never edited in place.
+        loaded_at_field: _ingested_at
+        freshness:
+          warn_after: {count: 26, period: hour}

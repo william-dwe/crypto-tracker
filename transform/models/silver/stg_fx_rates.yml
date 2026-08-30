@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: stg_fx_rates
+    description: >
+      Published FX rates plus a synthetic USD->USD identity row per date, so
+      base-currency reporting uses the same join path as any other currency.
+      Grain: (rate_date, base_currency, quote_currency).
+    columns:
+      - name: rate_date
+        description: ECB publication date. Business days only; gaps are real.
+        data_tests: [not_null]
+      - name: quote_currency
+        data_tests: [not_null]
+      - name: rate_to_usd
+        data_tests: [not_null]

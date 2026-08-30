@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: coin_market_chart_raw
+        description: >
+          Daily price/market-cap/volume history from /coins/{id}/market_chart,
+          merged on (coin_id, price_ts_ms).

@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: fct_coin_snapshot
+    description: "Intraday market state. Grain: one row per (coin, snapshot_ts)."
+    columns:
+      - name: coin_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_coin')
+              field: coin_key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+      - name: price_usd
+        data_tests: [not_null]

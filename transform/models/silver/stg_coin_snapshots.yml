@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: stg_coin_snapshots
+    description: "Cleansed market snapshots. Grain: (coin_id, snapshot_ts)."
+    columns:
+      - name: coin_id
+        description: CoinGecko coin slug, lowercased and trimmed.
+        data_tests: [not_null]
+      - name: snapshot_ts
+        description: Pipeline ingestion timestamp; identifies the snapshot.
+        data_tests: [not_null]
+      - name: price_usd
+        data_tests: [not_null]

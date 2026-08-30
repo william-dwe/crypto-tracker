@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: mart_portfolio_value_daily
+    description: "Per-holding valuation. Grain: one row per (holding, date, currency)."
+    columns:
+      - name: coin_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_coin')
+              field: coin_key
+      - name: currency_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_currency')
+              field: currency_key
+      - name: position_value_usd
+        data_tests: [not_null]
+      - name: position_value_local
+        data_tests: [not_null]
+      - name: symbol
+        description: >
+          Sourced from dim_coin via a left join. A null here means a held coin is
+          missing from the dimension, which the coin_key relationships test catches.

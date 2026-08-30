@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: dim_coin
+    description: "Conformed coin dimension. Grain: one row per coin."
+    columns:
+      - name: coin_key
+        description: Surrogate key, md5(coin_id).
+        data_tests: [not_null, unique]
+      - name: coin_id
+        data_tests: [not_null, unique]
+      - name: symbol
+        data_tests: [not_null]
+      - name: is_active
+        description: True when the coin appeared in the most recent snapshot.
