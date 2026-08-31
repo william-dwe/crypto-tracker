@@ -270,6 +270,8 @@ python -m scripts.duckdb_cli sql "select count(*) from bronze.coins_markets_raw"
 
 ```
 
+Prefer zero local setup? Run this module in Colab: [`notebooks/ingest_dlt_colab.ipynb`](https://colab.research.google.com/github/william-dwe/crypto-tracker/blob/main/notebooks/ingest_dlt_colab.ipynb).
+
 No dbt here on purpose: this is the load half of ELT, and it stands alone.
 
 ### Exercise
@@ -365,6 +367,8 @@ dbt build --full-refresh --profiles-dir .   # rebuild incremental models from sc
 
 The lineage graph is the moment the project becomes visual. Every node is a
 model; every line is a `ref()`. Click any node to see its columns and tests.
+
+Prefer zero local setup? Run this module in Colab: [`notebooks/dbt_colab.ipynb`](https://colab.research.google.com/github/william-dwe/crypto-tracker/blob/main/notebooks/dbt_colab.ipynb).
 
 ### Exercise
 
