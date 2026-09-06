@@ -14,3 +14,6 @@ __pycache__/
 
 # dbt's local anonymous usage id
 transform/.user.yml
+
+# Local linked worktrees
+.worktrees/
