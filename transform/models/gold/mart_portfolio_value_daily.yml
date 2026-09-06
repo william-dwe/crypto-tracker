@@ -8,14 +8,16 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('dim_coin')
-              field: coin_key
+              arguments:
+                to: ref('dim_coin')
+                field: coin_key
       - name: currency_key
         data_tests:
           - not_null
           - relationships:
-              to: ref('dim_currency')
-              field: currency_key
+              arguments:
+                to: ref('dim_currency')
+                field: currency_key
       - name: position_value_usd
         data_tests: [not_null]
       - name: position_value_local

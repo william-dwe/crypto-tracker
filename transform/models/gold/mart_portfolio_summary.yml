@@ -8,8 +8,9 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('dim_currency')
-              field: currency_key
+              arguments:
+                to: ref('dim_currency')
+                field: currency_key
       - name: total_value_local
         data_tests: [not_null]
       - name: holdings_count

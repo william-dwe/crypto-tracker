@@ -12,7 +12,8 @@ models:
           - not_null
           - unique
           - accepted_values:
-              values: ['USD', 'EUR', 'GBP', 'JPY', 'IDR', 'SGD', 'AUD', 'CHF', 'CAD']
+              arguments:
+                values: ['USD', 'EUR', 'GBP', 'JPY', 'IDR', 'SGD', 'AUD', 'CHF', 'CAD']
       - name: is_base
         description: True for USD, the base every rate is quoted against.
         data_tests: [not_null]

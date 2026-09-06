@@ -18,8 +18,9 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('br_completed_loads')
-              field: load_id
+              arguments:
+                to: ref('br_completed_loads')
+                field: load_id
 
   - name: br_coin_market_chart
     description: "Daily history from completed loads only. Grain unchanged from the dlt table."
@@ -30,8 +31,9 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('br_completed_loads')
-              field: load_id
+              arguments:
+                to: ref('br_completed_loads')
+                field: load_id
 
   - name: br_fx_rates
     description: "FX rates from completed loads only. Grain unchanged from the dlt table."
@@ -42,5 +44,6 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('br_completed_loads')
-              field: load_id
+              arguments:
+                to: ref('br_completed_loads')
+                field: load_id

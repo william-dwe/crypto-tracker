@@ -8,8 +8,9 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('dim_currency')
-              field: currency_key
+              arguments:
+                to: ref('dim_currency')
+                field: currency_key
       - name: tracked_coins
         data_tests: [not_null]
       - name: top_gainer_coin_id
