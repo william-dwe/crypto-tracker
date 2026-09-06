@@ -1,3 +1,5 @@
+{{ config(materialized='view') }}
+
 -- Grain: one row per (coin_id, price_date). The history spine every daily fact
 -- and datamart is built on.
 

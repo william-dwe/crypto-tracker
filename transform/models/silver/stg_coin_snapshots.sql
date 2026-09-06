@@ -1,3 +1,5 @@
+{{ config(materialized='view') }}
+
 -- Grain: one row per (coin_id, snapshot_ts).
 --
 -- Cleansing, typing and dedupe only. No joins to conformed dimensions and no

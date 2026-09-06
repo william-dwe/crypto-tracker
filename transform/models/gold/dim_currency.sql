@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 -- Grain: one row per currency.
 --
 -- Currency codes are discovered from the FX data rather than hard-coded, so

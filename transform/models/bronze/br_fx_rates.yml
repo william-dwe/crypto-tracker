@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: br_fx_rates
+    description: "FX rates from completed loads only. Grain unchanged from the dlt table."
+    columns:
+      - name: quote
+        data_tests: [not_null]
+      - name: _dlt_load_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('br_completed_loads')
+                field: load_id

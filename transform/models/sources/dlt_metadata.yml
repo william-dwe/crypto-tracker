@@ -1,7 +1,8 @@
 version: 2
 
 sources:
-  - name: bronze
+  - name: dlt_metadata
+    # dlt and dbt share bronze: dlt owns raw tables and bookkeeping; dbt adds br_* views.
     schema: bronze
     tables:
       - name: _dlt_loads

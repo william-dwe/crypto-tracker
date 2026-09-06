@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 -- Grain: one row per coin.
 --
 -- Surrogate key rule for the whole star schema: md5 of the natural key, cast to

@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 -- Grain: one calendar day.
 --
 -- Spans the observed price history and extends a year past it so that portfolio

@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 -- Grain: one row per (date, currency).
 --
 -- Whole-portfolio rollup. Aggregates the per-holding datamart rather than

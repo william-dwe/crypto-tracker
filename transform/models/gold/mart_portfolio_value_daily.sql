@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 -- Grain: one row per (holding, date, currency).
 --
 -- Datamart: reads exclusively from the star schema (dims + facts), never from

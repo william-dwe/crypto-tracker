@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: br_completed_loads
+    description: >
+      dlt load ids whose load package completed (`status = 0`). The single place
+      that encodes that status code.
+    columns:
+      - name: load_id
+        data_tests: [not_null, unique]

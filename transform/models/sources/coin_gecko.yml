@@ -1,12 +1,8 @@
 version: 2
 
 sources:
-  - name: bronze
-    description: >
-      dlt's landing zone, shared with dbt's trust-filter views. dlt owns the
-      `*_raw` source tables plus its bookkeeping (`_dlt_loads`, `_dlt_version`,
-      `_dlt_pipeline_state`) and the `bronze_staging` schema for merge loads.
-      dbt adds the `br_*` views over the source tables in the same schema.
+  - name: coin_gecko
+    # dlt owns these raw tables in bronze; dbt reads them but never writes them.
     schema: bronze
     tables:
       - name: coins_markets_raw
@@ -16,3 +12,7 @@ sources:
         loaded_at_field: _ingested_at
         freshness:
           warn_after: {count: 26, period: hour}
+      - name: coin_market_chart_raw
+        description: >
+          Daily price/market-cap/volume history from /coins/{id}/market_chart,
+          merged on (coin_id, price_ts_ms).

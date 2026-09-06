@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 -- Grain: one row per (coin, currency), as of the latest available price date.
 --
 -- Trailing returns are computed against the price N rows back in each coin's own

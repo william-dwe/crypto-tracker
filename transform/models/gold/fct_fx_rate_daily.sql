@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 -- Grain: one row per (date, quote currency).
 --
 -- Built on the forward-filled silver model, so there is a rate for every

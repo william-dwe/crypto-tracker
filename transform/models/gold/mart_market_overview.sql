@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 -- Grain: one row per (date, currency).
 --
 -- Market-wide breadth and totals across the tracked universe.

@@ -13,17 +13,13 @@ clean-targets: ["target", "dbt_packages"]
 
 models:
   crypto_tracker:
-    # Views: bronze adds a completed-loads filter, not a physical copy, so
-    # materializing it would duplicate the whole landing zone on disk.
+    # Each model owns its materialization so its SQL shows how dbt builds it.
     bronze:
       +schema: bronze
-      +materialized: view
     silver:
       +schema: silver
-      +materialized: view
     gold:
       +schema: gold
-      +materialized: table
 
 seeds:
   crypto_tracker:

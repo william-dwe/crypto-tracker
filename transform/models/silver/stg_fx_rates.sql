@@ -1,3 +1,5 @@
+{{ config(materialized='view') }}
+
 -- Grain: one row per (rate_date, base_currency, quote_currency).
 --
 -- Includes a synthetic USD->USD identity row for every date so that reporting in

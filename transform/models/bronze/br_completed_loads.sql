@@ -1,3 +1,7 @@
+{{ config(materialized='view') }}
+
+-- A view applies completed-load filtering without copying dlt's raw landing data.
+
 -- The set of dlt load ids that finished successfully.
 --
 -- `_dlt_loads` is pipeline-internal bookkeeping in dlt's `bronze` schema. This
@@ -12,5 +16,5 @@ select
     load_id,
     schema_name,
     inserted_at as load_completed_at
-from {{ source('bronze', '_dlt_loads') }}
+from {{ source('dlt_metadata', '_dlt_loads') }}
 where status = 0

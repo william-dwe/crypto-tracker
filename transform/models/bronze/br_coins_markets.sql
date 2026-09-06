@@ -1,3 +1,7 @@
+{{ config(materialized='view') }}
+
+-- A view applies completed-load filtering without copying dlt's raw landing data.
+
 -- Bronze: raw payloads restricted to loads that actually completed.
 --
 -- Structurally 1:1 with the source — no renaming, casting or business logic,
@@ -7,6 +11,6 @@
 -- table would silently include them.
 
 select source.*
-from {{ source('bronze', 'coins_markets_raw') }} as source
+from {{ source('coin_gecko', 'coins_markets_raw') }} as source
 inner join {{ ref('br_completed_loads') }} as loads
     on loads.load_id = source._dlt_load_id

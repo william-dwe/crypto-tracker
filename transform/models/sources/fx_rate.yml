@@ -1,7 +1,7 @@
 version: 2
 
 sources:
-  - name: bronze
+  - name: fx_rate
     schema: bronze
     tables:
       - name: fx_rates_raw
